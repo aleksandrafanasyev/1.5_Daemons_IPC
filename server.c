@@ -1,9 +1,14 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <mqueue.h>
 #include <syslog.h>
+#include <signal.h>
+#include <errno.h>
+#include <string.h>
+#include <time.h>
 #include "ipc.h"
 
 #define STR_TIME_SIZE 256 //length for formated string with date and time
@@ -15,27 +20,20 @@ static const char * const prog_usage =
 	"-D daemond server\n"
 	"-i INTFILE file name fo int data\n"
 	"-h print this information\n"
-	"-s STRUCTNAME file name for struct data\n"
+	"-s STRUCTNAME file name for struct data\n";
 	
 static const char * afile_name = "array.txt";
 static const char * ifile_name = "int.txt";
 static const char * sfile_name = "struct.txt";
 
-static FILE afile;//file stream for array type
-static FILE ifile;//file stream for int type
-static FILE sfile;//file stream for struct type
+static FILE * afile;//file stream for array type
+static FILE * ifile;//file stream for int type
+static FILE * sfile;//file stream for struct type
 static int daemonize_srv;//0 - console proc, 1 - daemon
 static volatile sig_atomic_t term_flag;//0 - work, 1 - term proc
 //handler messege queue for IPC 
 static mqd_t mqueue_des; 
 static struct mq_attr mqueue_attr;
-
-
-static int print_usage(int is_error)
-{
-	printf(prog_usage);
-	exit(is_error ? EXIT_FAILURE : EXIT_SUCCESS);
-}
 
 static void sig_handl(int sig) //SIGTERM and SIGINT handler
 {
@@ -66,7 +64,7 @@ int main(int argc, char *argv[])
 {	
 	int opt;
 	while ((opt = getopt(argc, argv, ":aD:ih:s")) != -1){
-	    		    switch(opt){
+		switch(opt){
 		case 'a'://file name for array data
 			afile_name = optarg;
 			break;
@@ -77,16 +75,19 @@ int main(int argc, char *argv[])
 			ifile_name = optarg;
 			break;
 		case 'h'://help
-			print_usage(0);
+			printf(prog_usage);
+			exit(EXIT_SUCCESS);
 		case 's'://file name for struct data
 			sfile_name = optarg;
 			break;
 		case ':':// missing argument
 			printf("Error: missing argument\n");
-			print_usage(1);
+			printf(prog_usage);
+			exit(EXIT_FAILURE);
 		case '?'://unrecognized option
 			printf("Error: unrecognized option\n");
-			print_usage(1);
+			printf(prog_usage);
+			exit(EXIT_FAILURE);
 		default:
 			printf("Error: getopt\n");
 			exit(EXIT_FAILURE);
@@ -102,21 +103,21 @@ int main(int argc, char *argv[])
 	//create messege queue
 	mqueue_attr.mq_maxmsg = MQUEUE_MAXMSG;
 	mqueue_attr.mq_msgsize = sizeof(struct ipc);
-	if ((mqueue_des = mq_open(MQUEUE_NAME, O_CREATE|O_EXCL|O_RDWR, S_IRUSR|S_IWUSR, &mqueue_attr)) == -1)
+	if ((mqueue_des = mq_open(MQUEUE_NAME, O_CREAT|O_EXCL|O_RDWR, S_IRUSR|S_IWUSR, &mqueue_attr)) == -1)
 		  errExit("mq_open");
 	
 	//create 3 files
 	//new record added at the end of file if file already exist
 	//set stdio string buf mode (_IOLBF)
-	if ((afile = fopen(afile_name, "a") == NULL))
+	if ((afile = fopen(afile_name, "a")) == NULL)
 		  errExit("open file for array type");
 	if (setvbuf(afile, NULL, _IOLBF , 0) != 0)
 		errExit("setvbuf");
-	if ((ifile = fopen(ifile_name, "a") == NULL))
+	if ((ifile = fopen(ifile_name, "a")) == NULL)
 		  errExit("open file for array type");
 	if (setvbuf(ifile, NULL, _IOLBF , 0) != 0)
 		errExit("setvbuf");
-	if ((sfile = fopen(sfile_name, "a") == NULL))
+	if ((sfile = fopen(sfile_name, "a")) == NULL)
 		  errExit("open file for array type");
 	if (setvbuf(sfile, NULL, _IOLBF , 0) != 0)
 		errExit("setvbuf");
@@ -162,10 +163,10 @@ int main(int argc, char *argv[])
 			  errExit("mq_receive");
 		//formated string with localized date and time
 		time_t utime;
-		struct * ptm;
+		struct tm * ptm;
 		char strtm[STR_TIME_SIZE];
 		if ((utime = time(NULL)) == -1)
-			  errExit(time);
+			  errExit("time");
 		if ((ptm = localtime(&utime)) == NULL)
 			  errExit("localtime");
 		if (strftime(strtm, STR_TIME_SIZE, "%x,%X", ptm ) == 0)
@@ -180,7 +181,7 @@ int main(int argc, char *argv[])
 			if (fputc('\n', afile) == EOF)
 				  errExit("fputc");
 			break;
-		case INT:
+		case INTEGER:
 			if (fprintf(ifile, "%s:%i\n", strtm, qmsg.ipc_data.integer) < 0)
 				  errExit("fprintf");
 			break;

@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <mqueue.h>
 #include <string.h>
+#include <errno.h>
+#include <signal.h>
 #include "ipc.h"
 
 //max size for input line
@@ -12,7 +15,7 @@
 static mqd_t mqueue_des; 
 static struct mq_attr mqueue_attr;
 
-static int ifile; //input file stream 
+static FILE * ifile; //input file stream 
 
 static int exit_stat = EXIT_SUCCESS;
 
@@ -20,7 +23,7 @@ static int exit_stat = EXIT_SUCCESS;
 static const char * const prog_usage = 
 	"Usage: client {options}\n"
 	"-f INPUTFILE file name for input data\n"
-	"-h print this information\n"
+	"-h print this information\n";
 
 static volatile sig_atomic_t term_flag;//0 - work, 1 - term proc
 
@@ -116,7 +119,7 @@ int main(int argc, char * argv[])
 					fprintf(stderr, "Input file error in line %ld\n", nline);
 					continue;
 				}
-				qmsg.ipc_type = INT;
+				qmsg.ipc_type = INTEGER;
 			}else if (strcmp(ch, "struct") == 0){//read struct type from file
 				int tmp;
 				tmp = sscanf(nstr, "%d%d%d", &(qmsg.ipc_data.stct.a), &(qmsg.ipc_data.stct.b), &(qmsg.ipc_data.stct.c));
@@ -130,7 +133,7 @@ int main(int argc, char * argv[])
 				continue;
 			}
 			//send mesage
-			if (mq_send(mqueue_des, (char*) &dmsg, sizeof(struct ipc), 0) == -1)
+			if (mq_send(mqueue_des, (char*) &qmsg, sizeof(struct ipc), 0) == -1)
 				  errExit("mq_send");
 		}// while
 
@@ -152,7 +155,7 @@ int main(int argc, char * argv[])
 			}
 			switch (tpe){
 			case 0:// char[5]
-				printf("Введите данные (char[5]):\n");
+				printf("Введите данные для массива символов (строку из 5 печатных символов):\n");
 				if (fgets(sbuf, SBUF_MAX, stdin) == 0){
 					printf("Ошибка ввода\n");
 					continue;
@@ -164,18 +167,34 @@ int main(int argc, char * argv[])
 				qmsg.ipc_type = ARRAY;
 				break;
 			case 1:// integer
-				
-				
+				printf("Введите данные для типа int (целое число)\n");
+				if (fgets(sbuf, SBUF_MAX, stdin) == 0){
+					printf("Ошибка ввода\n");
+					continue;
+				}
+				if (sscanf(sbuf, "%d", &(qmsg.ipc_data.integer)) == EOF){
+					printf("Ошибка ввода\n");
+					continue;
+				}
+				qmsg.ipc_type = INTEGER;
 				break;
 			case 2:// struct
-
-				break;
+				printf("Введите данные структуры (три целых числа, разделенных пробелом):\n");
+				if (fgets(sbuf, SBUF_MAX, stdin) == 0){
+					printf("Ошибка ввода\n");
+					continue;
+				}
+				if (sscanf(sbuf, "%d%d%d", &(qmsg.ipc_data.stct.a), &(qmsg.ipc_data.stct.b), &(qmsg.ipc_data.stct.c)) == EOF){
+					printf("Ошибка ввода\n");
+					continue;
+				}
+				qmsg.ipc_type = STRUCT;
 			default:// wrong type
-				printf("Не верный тип\n");
+				printf("Ошибка ввода: не верный тип\n");
 				continue;
 			}
 			//send mesage
-			if (mq_send(mqueue_des, (char*) &dmsg, sizeof(struct ipc), 0) == -1)
+			if (mq_send(mqueue_des, (char*) &qmsg, sizeof(struct ipc), 0) == -1)
 				  errExit("mq_send");
 		}// while (term_flag == 0)
 	}// if-else (input_flag)

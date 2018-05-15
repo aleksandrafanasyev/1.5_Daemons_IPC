@@ -1,7 +1,7 @@
 #define MQUEUE_NAME "/my_mqueue"
 #define MQUEUE_MAXMSG 64
 
-enum dtype{ ARRAY, INT, STRUCT};
+enum dtype{ARRAY, INTEGER, STRUCT};
 
 struct mystruct{
 	int a;
@@ -10,14 +10,14 @@ struct mystruct{
 };
 
 union data{
-	char[5] array;
+	char array[5];
 	int integer;
-	mystruct stct;
+	struct mystruct stct;
 };
 
 struct ipc{
-	dtype ipc_type;
-	data ipc_data;
+	enum dtype ipc_type;
+	union data ipc_data;
 };
 
 
