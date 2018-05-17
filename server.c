@@ -63,7 +63,7 @@ static void errExit(const char * msg)
 int main(int argc, char *argv[])
 {	
 	int opt;
-	while ((opt = getopt(argc, argv, ":aD:ih:s")) != -1){
+	while ((opt = getopt(argc, argv, ":a:Di:hs:")) != -1){
 		switch(opt){
 		case 'a'://file name for array data
 			afile_name = optarg;
@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
 		errExit("sigaction");
 	if (sigaction(SIGINT, &act, NULL) == -1)
 		errExit("sigaction");
-
+	printf("Start server for work mesage queue\n");
 	//Daemonize server
 	if (daemonize_srv == 1){
 		pid_t d_pid;
@@ -159,8 +159,13 @@ int main(int argc, char *argv[])
 	//main cycle
 	while (term_flag != 1){
 		struct ipc qmsg;
-		if (mq_receive(mqueue_des,(char *) &qmsg, sizeof(struct ipc), NULL) == -1)
-			  errExit("mq_receive");
+		if (mq_receive(mqueue_des,(char *) &qmsg, sizeof(struct ipc), NULL) == -1){
+			if (term_flag == 0){ 
+				errExit("mq_receive");
+			}else{
+				break;
+			}
+		}
 		//formated string with localized date and time
 		time_t utime;
 		struct tm * ptm;
@@ -180,14 +185,20 @@ int main(int argc, char *argv[])
 				  errExit("fwrite");
 			if (fputc('\n', afile) == EOF)
 				  errExit("fputc");
+			if (daemonize_srv == 0)
+				  printf("%s:char[5]=%c%c%c%c%c\n",strtm,qmsg.ipc_data.array[0],qmsg.ipc_data.array[1],qmsg.ipc_data.array[2],qmsg.ipc_data.array[3],qmsg.ipc_data.array[4]);
 			break;
 		case INTEGER:
 			if (fprintf(ifile, "%s:%i\n", strtm, qmsg.ipc_data.integer) < 0)
 				  errExit("fprintf");
+			if (daemonize_srv == 0)
+				printf("%s:integer=%i\n",strtm,qmsg.ipc_data.integer);
 			break;
 		case STRUCT:
 			if (fprintf(sfile, "%s:%i %i %i\n", strtm, qmsg.ipc_data.stct.a, qmsg.ipc_data.stct.b, qmsg.ipc_data.stct.c) < 0)
 				  errExit("fprintf");
+			if (daemonize_srv == 0)
+				printf("%s:struct int a=%i, int b=%i, int c=%i\n",strtm,qmsg.ipc_data.stct.a,qmsg.ipc_data.stct.b,qmsg.ipc_data.stct.c);
 			break;
 		default:
 			  errExit("receive bad message type");

@@ -2,7 +2,7 @@
 
 SHELL := /bin/sh
 CC := gcc
-CFLAGS := -g -Wall -Werror
+CFLAGS := -g -Wall -Werror 
 LDFLAGS := -g -Wall -Werror
 LIBS :=-lrt 
 

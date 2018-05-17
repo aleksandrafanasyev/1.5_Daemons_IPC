@@ -43,6 +43,7 @@ static void errMsg(const char * msg)
 
 static void errExit(const char * msg)
 {
+	errMsg(msg);
 	//deallocate resource
 	if (mq_close(mqueue_des) == -1)
 		errMsg("mq_close");
@@ -57,7 +58,7 @@ int main(int argc, char * argv[])
 	int input_flag;
 	int opt;
 	char  sbuf[SBUF_MAX];
-	while((opt = getopt(argc, argv, ":f")) != -1){
+	while((opt = getopt(argc, argv, ":f:h")) != -1){
 		switch(opt){
 		case 'f'://input from file
 			ifile_name = optarg;
@@ -79,11 +80,12 @@ int main(int argc, char * argv[])
 			exit(EXIT_FAILURE);
 		}
 	}
+printf("start client\n");
 	//open messege queue
 	mqueue_attr.mq_maxmsg = MQUEUE_MAXMSG;
 	mqueue_attr.mq_msgsize = sizeof(struct ipc);
 	if ((mqueue_des = mq_open(MQUEUE_NAME, O_RDWR, S_IRUSR|S_IWUSR, &mqueue_attr)) == -1)
-		  errExit("mq_open");
+		  errExit("mq_open (may be server did not run)");
 	//set new handler for SIGTERM and SIGINT	
 	struct sigaction act;
 	sigemptyset(&act.sa_mask);
@@ -100,30 +102,50 @@ int main(int argc, char * argv[])
 			errExit("fopen");
 		char *ch, *nstr;
 		long nline = 0; // line number in input file
+		int cnt;
 		while ((fgets(sbuf, SBUF_MAX, ifile) != NULL) && (term_flag == 0)){
-			nstr = sbuf;
 			nline++;
-			ch = strtok(nstr, " :");			
+			nstr = sbuf;
+			ch = strtok(nstr, " :");
+//	printf("ch = %s\n",ch);
 			if (ch == NULL){
 				fprintf(stderr, "Input file error in line %ld\n", nline);
 				continue;
 			}else if (strcmp(ch, "array") == 0){//read array type from file
-				if (strlen(nstr) < 5){
+				ch = strtok(NULL,"");
+//	printf("ch_array=%s",ch);
+				if (ch == NULL){
 					fprintf(stderr, "Input file error in line %ld\n", nline);
 					continue;
 				}
-				memcpy(qmsg.ipc_data.array, nstr, 5);
+	  			if (strlen(ch) < 5){
+					fprintf(stderr, "Input file error in line %ld\n", nline);
+					continue;
+				}
+				memcpy(qmsg.ipc_data.array, ch, 5);
 				qmsg.ipc_type = ARRAY;
 			}else if (strcmp(ch, "integer") == 0){//read integer type from file
-				if (sscanf(nstr, "%d", &(qmsg.ipc_data.integer)) == EOF){
+				ch = strtok(NULL,"");
+//	printf("ch_int=%s",ch);
+				if (ch == NULL){
+					fprintf(stderr, "Input file error in line %ld\n", nline);
+					continue;
+				}
+				cnt = sscanf(ch, "%d", &(qmsg.ipc_data.integer)); 
+				if (cnt == EOF || cnt != 1){
 					fprintf(stderr, "Input file error in line %ld\n", nline);
 					continue;
 				}
 				qmsg.ipc_type = INTEGER;
 			}else if (strcmp(ch, "struct") == 0){//read struct type from file
-				int tmp;
-				tmp = sscanf(nstr, "%d%d%d", &(qmsg.ipc_data.stct.a), &(qmsg.ipc_data.stct.b), &(qmsg.ipc_data.stct.c));
-				if (tmp == EOF || tmp != 3){
+				ch = strtok(NULL,"");
+//	printf("ch_struct=%s",ch);
+				if (ch == NULL){
+					fprintf(stderr, "Input file error in line %ld\n", nline);
+					continue;
+				}
+				cnt = sscanf(ch, "%d%d%d", &(qmsg.ipc_data.stct.a), &(qmsg.ipc_data.stct.b), &(qmsg.ipc_data.stct.c));
+				if (cnt == EOF || cnt != 3){
 					fprintf(stderr, "Input file error in line %ld\n", nline);
 					continue;
 				}
@@ -135,7 +157,8 @@ int main(int argc, char * argv[])
 			//send mesage
 			if (mq_send(mqueue_des, (char*) &qmsg, sizeof(struct ipc), 0) == -1)
 				  errExit("mq_send");
-		}// while
+
+		  }// while
 
 		//close input file 
 		if (fclose(ifile) == EOF)
@@ -144,26 +167,29 @@ int main(int argc, char * argv[])
 		
 		while (term_flag == 0){
 			int tpe;
-			printf("Введите тип данных(0 - char[5], 1 - integer, 2 - struct):\n");
+			int cnt;
+			printf("######################################\nВведите тип данных(0 - char[5], 1 - integer, 2 - struct):\n");
 			if (fgets(sbuf, SBUF_MAX, stdin) == 0){
 				printf("Ошибка ввода\n");
 				continue;
 			}
-			if (sscanf(sbuf, "%1d", &tpe) == EOF){
+			cnt = sscanf(sbuf, "%1d", &tpe); 
+			if (cnt == EOF || cnt != 1){
 				printf("Ошибка ввода\n");
 				continue;
 			}
 			switch (tpe){
 			case 0:// char[5]
-				printf("Введите данные для массива символов (строку из 5 печатных символов):\n");
+				printf("Введите данные для массива символов (5 символов):\n");
 				if (fgets(sbuf, SBUF_MAX, stdin) == 0){
 					printf("Ошибка ввода\n");
 					continue;
 				}
-				if (sscanf(sbuf, "%5c", qmsg.ipc_data.array) == EOF){
+				if (strlen(sbuf) < 5){
 					printf("Ошибка ввода\n");
 					continue;
 				}
+				memcpy(qmsg.ipc_data.array, sbuf, 5);
 				qmsg.ipc_type = ARRAY;
 				break;
 			case 1:// integer
@@ -172,7 +198,9 @@ int main(int argc, char * argv[])
 					printf("Ошибка ввода\n");
 					continue;
 				}
-				if (sscanf(sbuf, "%d", &(qmsg.ipc_data.integer)) == EOF){
+
+				cnt = sscanf(sbuf, "%d", &(qmsg.ipc_data.integer)); 
+				if ((cnt == EOF) ||(cnt !=1)){
 					printf("Ошибка ввода\n");
 					continue;
 				}
@@ -184,11 +212,13 @@ int main(int argc, char * argv[])
 					printf("Ошибка ввода\n");
 					continue;
 				}
-				if (sscanf(sbuf, "%d%d%d", &(qmsg.ipc_data.stct.a), &(qmsg.ipc_data.stct.b), &(qmsg.ipc_data.stct.c)) == EOF){
+				cnt = sscanf(sbuf, "%d%d%d", &(qmsg.ipc_data.stct.a), &(qmsg.ipc_data.stct.b), &(qmsg.ipc_data.stct.c)); 
+				if (cnt == EOF || cnt != 3){
 					printf("Ошибка ввода\n");
 					continue;
 				}
 				qmsg.ipc_type = STRUCT;
+				break;
 			default:// wrong type
 				printf("Ошибка ввода: не верный тип\n");
 				continue;
