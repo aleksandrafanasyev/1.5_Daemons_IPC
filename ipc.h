@@ -1,5 +1,5 @@
 #define MQUEUE_NAME "/my_mqueue"
-#define MQUEUE_MAXMSG 64
+#define MQUEUE_MAXMSG 10 // max 10
 
 enum dtype{ARRAY, INTEGER, STRUCT};
 
