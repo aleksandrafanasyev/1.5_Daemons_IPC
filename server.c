@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
 		case 0:
 			  break;
 		default:
-			  printf("Daemon pid=%d",d_pid);
+			  printf("Daemon pid=%d\n",d_pid);
 			  exit(EXIT_SUCCESS);
 		}
 		
